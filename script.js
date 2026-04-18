@@ -79,11 +79,11 @@ fadeEls.forEach(el => fadeObserver.observe(el));
 
 // ─── POV DATA ─────────────────────────
 const povData = {
-  ibul: {
-    initial: 'I',
+  Ruby: {
+    initial: 'R',
     gradient: 'linear-gradient(135deg, #D4A5A5, #8B5E6B)',
     name: 'Shohibul Izar',
-    tag: '— Ibul',
+    tag: '— Ruby',
     paras: [
       { text: 'Waktu pertama ketemu di Kopi Kotak, gue sama sekali gak kenal siapa-siapa. Bahkan yang udah aktif di grup pun gue gak tau mukanya. Semuanya berjalan kayak nongkrong biasa.', highlight: false },
       { text: 'Sampai menjelang maghrib, waktu mau ada sesi pembagian pita, kita mulai kenalan satu-satu. Dan di situlah gue ngeliat dia — perempuan dengan baju warna coklat, rambut dikepang.', highlight: false },
