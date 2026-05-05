@@ -2,6 +2,10 @@
    IBUL & CHIARA — script.js
 ══════════════════════════════════════ */
 
+// ─── CLOUDINARY CONFIG ────────────────
+const CLOUDINARY_CLOUD_NAME = 'dvbi5gysg';
+const CLOUDINARY_UPLOAD_PRESET = 'about-us';
+
 // ─── PETALS ───────────────────────────
 (function spawnPetals() {
   const container = document.getElementById('petals');
@@ -51,7 +55,6 @@ fadeEls.forEach(el => fadeObserver.observe(el));
 
 // ─── COUNTER ANIMATION ────────────────
 (function initCounters() {
-  // Auto-calculate days together
   const startDate = new Date('2025-03-20');
   const today = new Date();
   const diff = Math.floor((today - startDate) / (1000 * 60 * 60 * 24));
@@ -169,7 +172,6 @@ const timelineEvents = [
     fadeObserver.observe(item);
   });
 
-  // End
   const end = document.createElement('div');
   end.className = 'tl-end fade-up';
   end.innerHTML = `<span class="tl-end-script">& forever</span><span class="tl-end-label">To be continued...</span>`;
@@ -177,8 +179,8 @@ const timelineEvents = [
   fadeObserver.observe(end);
 })();
 
-// ─── MEMORIES ─────────────────────────
-const STORAGE_KEY = 'ibul-chiara-memories';
+// ─── MEMORIES — Cloudinary Storage ────
+const STORAGE_KEY = 'ibul-chiara-memories-v2';
 
 function loadMemories() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -186,7 +188,11 @@ function loadMemories() {
 }
 
 function saveMemories(arr) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+  // Hanya simpan metadata (URL, caption, tag, date) — BUKAN base64
+  const safe = arr.map(({ id, src, caption, date, tag, createdAt }) =>
+    ({ id, src, caption, date, tag, createdAt })
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(safe));
 }
 
 let memories = loadMemories();
@@ -217,10 +223,8 @@ function renderMemories() {
         ${mem.date ? `<p class="mem-date">${mem.date}</p>` : ''}
       </div>
     `;
-    // Lightbox click
     card.querySelector('.mem-img-wrap img').addEventListener('click', () => openLightbox(mem));
     card.querySelector('.mem-caption').addEventListener('click', () => openLightbox(mem));
-    // Delete
     card.querySelector('.mem-del').addEventListener('click', e => {
       e.stopPropagation();
       if (confirm('Hapus memory ini?')) {
@@ -237,12 +241,12 @@ function renderMemories() {
 renderMemories();
 
 // ─── UPLOAD MODAL ─────────────────────
-const uploadOverlay = document.getElementById('uploadOverlay');
-const dropZone      = document.getElementById('dropZone');
+const uploadOverlay   = document.getElementById('uploadOverlay');
+const dropZone        = document.getElementById('dropZone');
 const dropPlaceholder = document.getElementById('dropPlaceholder');
-const dropPreview   = document.getElementById('dropPreview');
-const fileInput     = document.getElementById('fileInput');
-let selectedDataUrl = null;
+const dropPreview     = document.getElementById('dropPreview');
+const fileInput       = document.getElementById('fileInput');
+let selectedFile    = null;
 let activeTag       = 'together';
 
 document.getElementById('openUpload').addEventListener('click', () => {
@@ -255,8 +259,7 @@ uploadOverlay.addEventListener('click', e => { if (e.target === uploadOverlay) c
 function closeUpload() {
   uploadOverlay.classList.remove('open');
   document.body.style.overflow = '';
-  // Reset
-  selectedDataUrl = null;
+  selectedFile = null;
   dropPreview.src = '';
   dropPreview.classList.remove('show');
   dropPlaceholder.classList.remove('hidden');
@@ -267,11 +270,9 @@ function closeUpload() {
   activeTag = 'together';
 }
 
-// Drop zone click
 dropZone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
 
-// Drag and drop
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
@@ -282,17 +283,17 @@ dropZone.addEventListener('drop', e => {
 
 function handleFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
+  selectedFile = file;
+  // Preview lokal sementara
   const reader = new FileReader();
   reader.onload = e => {
-    selectedDataUrl = e.target.result;
-    dropPreview.src = selectedDataUrl;
+    dropPreview.src = e.target.result;
     dropPreview.classList.add('show');
     dropPlaceholder.classList.add('hidden');
   };
   reader.readAsDataURL(file);
 }
 
-// Tag buttons
 document.querySelectorAll('.tag-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
@@ -301,24 +302,55 @@ document.querySelectorAll('.tag-btn').forEach(btn => {
   });
 });
 
-// Save memory
-document.getElementById('saveMemory').addEventListener('click', () => {
-  const caption = document.getElementById('captionInput').value.trim();
-  if (!selectedDataUrl) { alert('Pilih foto dulu ya! ✿'); return; }
-  if (!caption) { alert('Isi caption dulu ya! ✿'); return; }
+// ─── UPLOAD KE CLOUDINARY ─────────────
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-  const mem = {
-    id: Date.now().toString(),
-    src: selectedDataUrl,
-    caption,
-    date: document.getElementById('dateInput').value.trim(),
-    tag: activeTag,
-    createdAt: new Date().toISOString(),
-  };
-  memories.unshift(mem);
-  saveMemories(memories);
-  renderMemories();
-  closeUpload();
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+    { method: 'POST', body: formData }
+  );
+
+  if (!res.ok) throw new Error('Upload gagal');
+  const data = await res.json();
+  return data.secure_url; // URL permanen yang bisa diakses siapapun
+}
+
+// ─── SAVE MEMORY ──────────────────────
+document.getElementById('saveMemory').addEventListener('click', async () => {
+  const caption = document.getElementById('captionInput').value.trim();
+  if (!selectedFile) { alert('Pilih foto dulu ya! ✿'); return; }
+  if (!caption)      { alert('Isi caption dulu ya! ✿'); return; }
+
+  const saveBtn = document.getElementById('saveMemory');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Uploading... ✿';
+
+  try {
+    const cloudUrl = await uploadToCloudinary(selectedFile);
+
+    const mem = {
+      id: Date.now().toString(),
+      src: cloudUrl,   // URL Cloudinary, bukan base64
+      caption,
+      date: document.getElementById('dateInput').value.trim(),
+      tag: activeTag,
+      createdAt: new Date().toISOString(),
+    };
+
+    memories.unshift(mem);
+    saveMemories(memories);
+    renderMemories();
+    closeUpload();
+  } catch (err) {
+    alert('Gagal upload foto. Coba lagi ya! ✿');
+    console.error(err);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Simpan Memory ✿';
+  }
 });
 
 // ─── LIGHTBOX ─────────────────────────
